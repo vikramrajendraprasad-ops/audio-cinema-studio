@@ -1,6 +1,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
 import 'models/cinema_config.dart';
 
 void main() {
@@ -40,8 +41,11 @@ class _CinemaScreenState extends State<CinemaScreen> {
     intensity: ProfileIntensity.medium,
   );
 
-  Map<String, dynamic> _configToMap(CinemaConfig config) {
+  String? inputFilePath;
+
+  Map<String, dynamic> _configToMap() {
     return {
+      'inputPath': inputFilePath ?? '',
       'profile': config.profile.name,
       'channels': config.channels.name,
       'intensity': config.intensity.name,
@@ -64,6 +68,39 @@ class _CinemaScreenState extends State<CinemaScreen> {
               'Cinema Conversion',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
+            const SizedBox(height: 24),
+
+            // Pick File
+            FilledButton.icon(
+              icon: const Icon(Icons.audiotrack),
+              label: Text(
+                inputFilePath == null
+                    ? 'Pick Audio File'
+                    : 'Audio Selected',
+              ),
+              onPressed: () async {
+                final result = await FilePicker.platform.pickFiles(
+                  type: FileType.audio,
+                );
+
+                if (result != null && result.files.single.path != null) {
+                  setState(() {
+                    inputFilePath = result.files.single.path!;
+                  });
+                }
+              },
+            ),
+
+            if (inputFilePath != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                inputFilePath!,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12),
+              ),
+            ],
+
             const SizedBox(height: 24),
 
             // Cinema Profile
@@ -162,20 +199,22 @@ class _CinemaScreenState extends State<CinemaScreen> {
             SizedBox(
               width: double.infinity,
               child: FilledButton(
-                onPressed: () async {
-                  final payload = _configToMap(config);
+                onPressed: inputFilePath == null
+                    ? null
+                    : () async {
+                        final payload = _configToMap();
 
-                  try {
-                    final result = await _channel.invokeMethod(
-                      'setCinemaConfig',
-                      payload,
-                    );
-                    debugPrint('Native response: $result');
-                  } catch (e) {
-                    debugPrint('Platform error: $e');
-                  }
-                },
-                child: const Text('Send to Engine'),
+                        try {
+                          final result = await _channel.invokeMethod(
+                            'setCinemaConfig',
+                            payload,
+                          );
+                          debugPrint('Native response: $result');
+                        } catch (e) {
+                          debugPrint('Platform error: $e');
+                        }
+                      },
+                child: const Text('Send to Cinema Engine'),
               ),
             ),
           ],

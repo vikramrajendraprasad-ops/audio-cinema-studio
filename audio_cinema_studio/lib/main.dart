@@ -1,5 +1,6 @@
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'models/cinema_config.dart';
 
 void main() {
@@ -30,11 +31,22 @@ class CinemaScreen extends StatefulWidget {
 }
 
 class _CinemaScreenState extends State<CinemaScreen> {
+  static const MethodChannel _channel =
+      MethodChannel('audio_cinema/engine');
+
   CinemaConfig config = const CinemaConfig(
     profile: CinemaProfile.dolby,
     channels: OutputChannels.stereo,
     intensity: ProfileIntensity.medium,
   );
+
+  Map<String, dynamic> _configToMap(CinemaConfig config) {
+    return {
+      'profile': config.profile.name,
+      'channels': config.channels.name,
+      'intensity': config.intensity.name,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -150,15 +162,25 @@ class _CinemaScreenState extends State<CinemaScreen> {
             SizedBox(
               width: double.infinity,
               child: FilledButton(
-                onPressed: () {
-                  debugPrint(config.toString());
+                onPressed: () async {
+                  final payload = _configToMap(config);
+
+                  try {
+                    final result = await _channel.invokeMethod(
+                      'setCinemaConfig',
+                      payload,
+                    );
+                    debugPrint('Native response: $result');
+                  } catch (e) {
+                    debugPrint('Platform error: $e');
+                  }
                 },
-                child: const Text('Convert (Engine not connected yet)'),
+                child: const Text('Send to Engine'),
               ),
             ),
           ],
         ),
       ),
-    );Wire Cinema UI to CinemaConfig model
+    );
   }
 }

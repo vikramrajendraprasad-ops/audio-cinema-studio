@@ -262,3 +262,26 @@ class _CinemaScreenState extends State<CinemaScreen> {
     );
   }
 }
+
+Card(
+  child: Padding(
+    padding: const EdgeInsets.all(12),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: const [
+        Text(
+          'External Audio Engine Required',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        SizedBox(height: 8),
+        Text(
+          '1. Install Termux\n'
+          '2. Run Audio Cinema Engine script once\n'
+          '3. Keep Termux running in background\n\n'
+          'Processing happens outside this app.',
+          style: TextStyle(fontSize: 13),
+        ),
+      ],
+    ),
+  ),
+),

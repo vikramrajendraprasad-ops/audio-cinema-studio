@@ -1,9 +1,12 @@
+
 package com.yourbrand.audiocinemastudio
 
 import android.util.Log
 import com.yourbrand.audiocinemastudio.engine.*
 
 class CinemaEngine {
+
+    private val commandBuilder = FfmpegCommandBuilder()
 
     fun applyCinemaConfig(
         inputPath: String,
@@ -21,51 +24,21 @@ class CinemaEngine {
         }
         val profileIntensity = ProfileIntensity.valueOf(intensity.uppercase())
 
-        Log.d("CinemaEngine", "========== CINEMA ENGINE ==========")
-        Log.d("CinemaEngine", "Input File      : $inputPath")
-        Log.d("CinemaEngine", "Profile         : $cinemaProfile")
-        Log.d("CinemaEngine", "Output Channels : $outputChannels")
-        Log.d("CinemaEngine", "Intensity       : $profileIntensity")
+        val outputPath = inputPath.replaceAfterLast(".", "cinema.wav")
 
-        // Routing logic (stub only)
-        when (cinemaProfile) {
-            CinemaProfile.DOLBY -> applyDolby(profileIntensity, outputChannels)
-            CinemaProfile.SONY  -> applySony(profileIntensity, outputChannels)
-            CinemaProfile.JBL   -> applyJbl(profileIntensity, outputChannels)
-            CinemaProfile.BOSE  -> applyBose(profileIntensity, outputChannels)
-        }
+        val ffmpegCommand = commandBuilder.build(
+            inputPath = inputPath,
+            outputPath = outputPath,
+            profile = cinemaProfile,
+            channels = outputChannels,
+            intensity = profileIntensity
+        )
 
-        Log.d("CinemaEngine", "Engine execution complete (STUB)")
+        Log.d("CinemaEngine", "======== FFmpeg COMMAND (STUB) ========")
+        Log.d("CinemaEngine", ffmpegCommand)
+        Log.d("CinemaEngine", "======================================")
+
+        // ⚠️ NOT EXECUTED YET
         return true
-    }
-
-    // ================== PROFILE STUBS ==================
-
-    private fun applyDolby(
-        intensity: ProfileIntensity,
-        channels: OutputChannels
-    ) {
-        Log.d("CinemaEngine", "Dolby Cinema → intensity=$intensity, channels=$channels")
-    }
-
-    private fun applySony(
-        intensity: ProfileIntensity,
-        channels: OutputChannels
-    ) {
-        Log.d("CinemaEngine", "Sony Clarity → intensity=$intensity, channels=$channels")
-    }
-
-    private fun applyJbl(
-        intensity: ProfileIntensity,
-        channels: OutputChannels
-    ) {
-        Log.d("CinemaEngine", "JBL Punch → intensity=$intensity, channels=$channels")
-    }
-
-    private fun applyBose(
-        intensity: ProfileIntensity,
-        channels: OutputChannels
-    ) {
-        Log.d("CinemaEngine", "Bose Deep → intensity=$intensity, channels=$channels")
     }
 }

@@ -1,4 +1,8 @@
 
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
@@ -46,10 +50,19 @@ class _CinemaScreenState extends State<CinemaScreen> {
   String? inputFilePath;
   Map<String, CinemaConfig> presets = {};
 
+  Timer? statusTimer;
+  String jobState = "idle"; // idle | processing | done | error
+
   @override
   void initState() {
     super.initState();
     _loadPresets();
+  }
+
+  @override
+  void dispose() {
+    statusTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadPresets() async {
@@ -66,6 +79,32 @@ class _CinemaScreenState extends State<CinemaScreen> {
     };
   }
 
+  void startStatusPolling() {
+    statusTimer?.cancel();
+
+    statusTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+      final file = File('/sdcard/AudioCinema/status.json');
+
+      if (!await file.exists()) {
+        setState(() => jobState = "idle");
+        return;
+      }
+
+      try {
+        final jsonMap = jsonDecode(await file.readAsString());
+        final state = jsonMap['state'] ?? 'idle';
+
+        setState(() => jobState = state);
+
+        if (state == "done" || state == "error") {
+          statusTimer?.cancel();
+        }
+      } catch (_) {
+        setState(() => jobState = "idle");
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -73,7 +112,7 @@ class _CinemaScreenState extends State<CinemaScreen> {
         title: const Text('Audio Cinema Studio'),
         centerTitle: true,
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -82,9 +121,35 @@ class _CinemaScreenState extends State<CinemaScreen> {
               'Cinema Conversion',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
 
-            // Pick File
+            // Termux info
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text(
+                      'External Audio Engine Required',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      '1. Install Termux\n'
+                      '2. Start Audio Cinema engine script\n'
+                      '3. Keep Termux running in background\n\n'
+                      'Processing happens outside this app.',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Pick audio file
             FilledButton.icon(
               icon: const Icon(Icons.audiotrack),
               label: Text(
@@ -105,9 +170,19 @@ class _CinemaScreenState extends State<CinemaScreen> {
               },
             ),
 
+            if (inputFilePath != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                inputFilePath!,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12),
+              ),
+            ],
+
             const SizedBox(height: 16),
 
-            // Preset Save / Load
+            // Presets
             Row(
               children: [
                 Expanded(
@@ -148,7 +223,7 @@ class _CinemaScreenState extends State<CinemaScreen> {
 
             const SizedBox(height: 24),
 
-            // Cinema Profile
+            // Cinema profile
             const Text('Cinema Profile'),
             const SizedBox(height: 8),
             DropdownButtonFormField<CinemaProfile>(
@@ -185,7 +260,7 @@ class _CinemaScreenState extends State<CinemaScreen> {
 
             const SizedBox(height: 24),
 
-            // Output Channels
+            // Output channels
             const Text('Output Channels'),
             const SizedBox(height: 8),
             SegmentedButton<OutputChannels>(
@@ -239,14 +314,56 @@ class _CinemaScreenState extends State<CinemaScreen> {
               },
             ),
 
-            const Spacer(),
+            const SizedBox(height: 24),
 
+            // Progress UI
+            Card(
+              color: jobState == "processing"
+                  ? Colors.orange.shade50
+                  : jobState == "done"
+                      ? Colors.green.shade50
+                      : jobState == "error"
+                          ? Colors.red.shade50
+                          : Colors.grey.shade100,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    if (jobState == "processing")
+                      const CircularProgressIndicator()
+                    else if (jobState == "done")
+                      const Icon(Icons.check_circle, color: Colors.green)
+                    else if (jobState == "error")
+                      const Icon(Icons.error, color: Colors.red)
+                    else
+                      const Icon(Icons.pause_circle, color: Colors.grey),
+                    const SizedBox(width: 12),
+                    Text(
+                      jobState == "processing"
+                          ? "Processing audio via external engine…"
+                          : jobState == "done"
+                              ? "Conversion completed successfully"
+                              : jobState == "error"
+                                  ? "Conversion failed"
+                                  : "Idle",
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // Convert button
             SizedBox(
               width: double.infinity,
               child: FilledButton(
                 onPressed: inputFilePath == null
                     ? null
                     : () async {
+                        setState(() => jobState = "processing");
+                        startStatusPolling();
+
                         final payload = _configToMap();
                         await _channel.invokeMethod(
                           'setCinemaConfig',
@@ -262,26 +379,3 @@ class _CinemaScreenState extends State<CinemaScreen> {
     );
   }
 }
-
-Card(
-  child: Padding(
-    padding: const EdgeInsets.all(12),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: const [
-        Text(
-          'External Audio Engine Required',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        SizedBox(height: 8),
-        Text(
-          '1. Install Termux\n'
-          '2. Run Audio Cinema Engine script once\n'
-          '3. Keep Termux running in background\n\n'
-          'Processing happens outside this app.',
-          style: TextStyle(fontSize: 13),
-        ),
-      ],
-    ),
-  ),
-),

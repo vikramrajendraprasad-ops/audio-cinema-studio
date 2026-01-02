@@ -25,21 +25,31 @@ jobs:
           flutter-version: '3.19.6'
           cache: true
 
+      # 🔑 RENAME DIRECTORY FOR DART COMPATIBILITY
+      - name: Rename project directory
+        run: |
+          cd ..
+          mv audio-cinema-studio audio_cinema_studio
+
+      # 🔑 RUN ALL FLUTTER COMMANDS INSIDE RENAMED DIR
       - name: Flutter doctor
         run: flutter doctor -v
+        working-directory: ../audio_cinema_studio
 
       - name: Flutter pub get
         run: flutter pub get
+        working-directory: ../audio_cinema_studio
 
-      # 🔑 THIS FIXES YOUR ERROR
-      - name: Regenerate Android platform
+      - name: Generate Android platform
         run: flutter create .
+        working-directory: ../audio_cinema_studio
 
       - name: Build APK (debug)
         run: flutter build apk --debug
+        working-directory: ../audio_cinema_studio
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: audio-cinema-studio-apk
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          path: ../audio_cinema_studio/build/app/outputs/flutter-apk/app-debug.apk

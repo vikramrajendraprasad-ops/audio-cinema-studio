@@ -10,26 +10,37 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1️⃣ Checkout repo
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 2️⃣ Java (required by Android / Gradle)
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
+      # 3️⃣ Flutter (PINNED VERSION – IMPORTANT)
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: 'stable'
+          flutter-version: '3.19.6'
+          cache: true
 
+      # 4️⃣ Verify Flutter install (debug safety)
+      - name: Flutter doctor
+        run: flutter doctor -v
+
+      # 5️⃣ Fetch Dart dependencies
       - name: Flutter pub get
         run: flutter pub get
 
+      # 6️⃣ Build DEBUG APK (no signing issues)
       - name: Build APK (debug)
         run: flutter build apk --debug
 
+      # 7️⃣ Upload APK artifact
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:

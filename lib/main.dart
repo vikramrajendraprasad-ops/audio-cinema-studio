@@ -1,127 +1,104 @@
 
-import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
 
 void main() {
-  runApp(const AudioCinemaStudioApp());
+  runApp(const AudioCinemaApp());
 }
 
-/* ===================== ENUMS ===================== */
-
-enum CinemaProfile { dolby, sony, jbl, bose }
-enum OutputChannels { stereo, surround51, surround71 }
-enum ProfileIntensity { low, medium, high }
-
-/* ===================== CONFIG MODEL ===================== */
-
-class CinemaConfig {
-  final CinemaProfile profile;
-  final OutputChannels channels;
-  final ProfileIntensity intensity;
-
-  const CinemaConfig({
-    required this.profile,
-    required this.channels,
-    required this.intensity,
-  });
-
-  CinemaConfig copyWith({
-    CinemaProfile? profile,
-    OutputChannels? channels,
-    ProfileIntensity? intensity,
-  }) {
-    return CinemaConfig(
-      profile: profile ?? this.profile,
-      channels: channels ?? this.channels,
-      intensity: intensity ?? this.intensity,
-    );
-  }
-}
-
-/* ===================== APP ===================== */
-
-class AudioCinemaStudioApp extends StatelessWidget {
-  const AudioCinemaStudioApp({super.key});
+class AudioCinemaApp extends StatelessWidget {
+  const AudioCinemaApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Audio Cinema Studio',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
         colorSchemeSeed: Colors.deepPurple,
       ),
-      home: const CinemaScreen(),
+      home: const AudioCinemaHome(),
     );
   }
 }
 
-/* ===================== SCREEN ===================== */
-
-class CinemaScreen extends StatefulWidget {
-  const CinemaScreen({super.key});
+class AudioCinemaHome extends StatefulWidget {
+  const AudioCinemaHome({super.key});
 
   @override
-  State<CinemaScreen> createState() => _CinemaScreenState();
+  State<AudioCinemaHome> createState() => _AudioCinemaHomeState();
 }
 
-class _CinemaScreenState extends State<CinemaScreen> {
-  static const MethodChannel _channel =
-      MethodChannel('audio_cinema/engine');
+class _AudioCinemaHomeState extends State<AudioCinemaHome> {
+  String? pickedFilePath;
+  String jobState = 'idle';
 
-  CinemaConfig config = const CinemaConfig(
-    profile: CinemaProfile.dolby,
-    channels: OutputChannels.stereo,
-    intensity: ProfileIntensity.medium,
-  );
+  String cinemaProfile = 'Dolby Cinema';
+  String channels = 'Stereo';
+  String intensity = 'Medium';
 
-  String? inputFilePath;
-  Timer? statusTimer;
-  String jobState = "idle"; // idle | processing | done | error
+  final List<String> profiles = [
+    'Dolby Cinema',
+    'Sony Clarity',
+    'JBL Punch',
+    'Bose Deep',
+  ];
 
-  int hoaOrder = 1;
-  bool binaural = true;
+  // 🔑 Ensure shared directory
+  Future<Directory> ensureCinemaDir() async {
+    final dir = Directory('/sdcard/AudioCinema');
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    return dir;
+  }
 
-  /* ===================== STATUS POLLING ===================== */
+  // 🎵 Pick audio
+  Future<void> pickAudio() async {
+    final result = await FilePicker.platform.pickFiles(type: FileType.audio);
+    if (result != null && result.files.single.path != null) {
+      setState(() {
+        pickedFilePath = result.files.single.path!;
+      });
+    }
+  }
 
-  void startStatusPolling() {
-    statusTimer?.cancel();
-    statusTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
-      final file = File('/sdcard/AudioCinema/status.json');
-      if (!await file.exists()) return;
-      try {
-        final map = jsonDecode(await file.readAsString());
-        final state = map['state'] ?? 'idle';
-        setState(() => jobState = state);
-        if (state == "done" || state == "error") {
-          statusTimer?.cancel();
-        }
-      } catch (_) {}
+  // 🚀 Send job to Termux engine
+  Future<void> sendToCinemaEngine() async {
+    if (pickedFilePath == null) return;
+
+    final cinemaDir = await ensureCinemaDir();
+
+    // Copy input file to shared storage
+    final inputFile = File(pickedFilePath!);
+    final ext = p.extension(inputFile.path);
+    final sharedInput = p.join(cinemaDir.path, 'input$ext');
+    await inputFile.copy(sharedInput);
+
+    // Output file
+    final outputFile = p.join(
+      cinemaDir.path,
+      'output_${DateTime.now().millisecondsSinceEpoch}.wav',
+    );
+
+    // Build FFmpeg command (basic – profiles can modify later)
+    final cmd = 'ffmpeg -y -i "$sharedInput" "$outputFile"';
+
+    // Write job.txt
+    final jobFile = File(p.join(cinemaDir.path, 'job.txt'));
+    await jobFile.writeAsString(cmd);
+
+    // Write status.json
+    final statusFile = File(p.join(cinemaDir.path, 'status.json'));
+    await statusFile.writeAsString('{"state":"queued"}');
+
+    setState(() {
+      jobState = 'processing';
     });
   }
-
-  /* ===================== OUTPUT LIST ===================== */
-
-  List<FileSystemEntity> listOutputs() {
-    final dir = Directory('/sdcard/AudioCinema');
-    if (!dir.existsSync()) return [];
-    return dir
-        .listSync()
-        .where((f) =>
-            f.path.endsWith('.wav') ||
-            f.path.endsWith('.ac3') ||
-            f.path.endsWith('.flac'))
-        .toList()
-        .reversed
-        .toList();
-  }
-
-  /* ===================== UI ===================== */
 
   @override
   Widget build(BuildContext context) {
@@ -133,226 +110,104 @@ class _CinemaScreenState extends State<CinemaScreen> {
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-
-            /* ===== INFO ===== */
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(12),
-                child: const Text(
+                child: Text(
                   'This app uses an external FFmpeg engine via Termux.\n'
                   'Keep Termux running in background.',
-                  style: TextStyle(fontSize: 13),
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),
             ),
-
             const SizedBox(height: 16),
 
-            /* ===== FILE PICKER ===== */
-            FilledButton.icon(
-              icon: const Icon(Icons.audiotrack),
-              label: Text(inputFilePath == null
-                  ? 'Pick Audio File'
-                  : 'Audio Selected'),
-              onPressed: () async {
-                final result = await FilePicker.platform.pickFiles(
-                  type: FileType.audio,
-                );
-                if (result != null) {
-                  setState(() {
-                    inputFilePath = result.files.single.path;
-                  });
-                }
-              },
+            ElevatedButton.icon(
+              onPressed: pickAudio,
+              icon: const Icon(Icons.music_note),
+              label: Text(
+                pickedFilePath == null ? 'Pick Audio File' : 'Audio Selected',
+              ),
             ),
 
-            if (inputFilePath != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  inputFilePath!,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
+            if (pickedFilePath != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                pickedFilePath!,
+                style: const TextStyle(fontSize: 12),
               ),
+            ],
 
-            const Divider(height: 32),
+            const SizedBox(height: 24),
 
-            /* ===== CINEMA PROFILE ===== */
             const Text('Cinema Profile'),
-            DropdownButtonFormField<CinemaProfile>(
-              value: config.profile,
-              items: const [
-                DropdownMenuItem(
-                    value: CinemaProfile.dolby,
-                    child: Text('Dolby Cinema')),
-                DropdownMenuItem(
-                    value: CinemaProfile.sony,
-                    child: Text('Sony Clarity')),
-                DropdownMenuItem(
-                    value: CinemaProfile.jbl,
-                    child: Text('JBL Punch')),
-                DropdownMenuItem(
-                    value: CinemaProfile.bose,
-                    child: Text('Bose Deep')),
-              ],
-              onChanged: (v) =>
-                  setState(() => config = config.copyWith(profile: v)),
+            DropdownButton<String>(
+              value: cinemaProfile,
+              isExpanded: true,
+              items: profiles
+                  .map(
+                    (p) => DropdownMenuItem(
+                      value: p,
+                      child: Text(p),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) => setState(() => cinemaProfile = v!),
             ),
 
             const SizedBox(height: 16),
-
-            /* ===== CHANNELS ===== */
             const Text('Output Channels'),
-            SegmentedButton<OutputChannels>(
+            SegmentedButton<String>(
               segments: const [
-                ButtonSegment(
-                    value: OutputChannels.stereo, label: Text('Stereo')),
-                ButtonSegment(
-                    value: OutputChannels.surround51, label: Text('5.1')),
-                ButtonSegment(
-                    value: OutputChannels.surround71, label: Text('7.1')),
+                ButtonSegment(value: 'Stereo', label: Text('Stereo')),
+                ButtonSegment(value: '5.1', label: Text('5.1')),
+                ButtonSegment(value: '7.1', label: Text('7.1')),
               ],
-              selected: {config.channels},
-              onSelectionChanged: (s) =>
-                  setState(() => config = config.copyWith(channels: s.first)),
+              selected: {channels},
+              onSelectionChanged: (s) => setState(() => channels = s.first),
             ),
 
             const SizedBox(height: 16),
-
-            /* ===== INTENSITY ===== */
             const Text('Profile Intensity'),
-            SegmentedButton<ProfileIntensity>(
+            SegmentedButton<String>(
               segments: const [
-                ButtonSegment(
-                    value: ProfileIntensity.low, label: Text('Low')),
-                ButtonSegment(
-                    value: ProfileIntensity.medium, label: Text('Medium')),
-                ButtonSegment(
-                    value: ProfileIntensity.high, label: Text('High')),
+                ButtonSegment(value: 'Low', label: Text('Low')),
+                ButtonSegment(value: 'Medium', label: Text('Medium')),
+                ButtonSegment(value: 'High', label: Text('High')),
               ],
-              selected: {config.intensity},
-              onSelectionChanged: (s) =>
-                  setState(() => config = config.copyWith(intensity: s.first)),
+              selected: {intensity},
+              onSelectionChanged: (s) => setState(() => intensity = s.first),
             ),
 
-            const Divider(height: 32),
-
-            /* ===== PROGRESS ===== */
+            const SizedBox(height: 24),
             Card(
-              color: jobState == "processing"
-                  ? Colors.orange.shade50
-                  : jobState == "done"
-                      ? Colors.green.shade50
-                      : jobState == "error"
-                          ? Colors.red.shade50
-                          : Colors.grey.shade100,
+              color: jobState == 'processing'
+                  ? Colors.orange.shade100
+                  : Colors.grey.shade200,
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    if (jobState == "processing")
-                      const CircularProgressIndicator()
-                    else if (jobState == "done")
-                      const Icon(Icons.check_circle, color: Colors.green)
-                    else if (jobState == "error")
-                      const Icon(Icons.error, color: Colors.red)
-                    else
-                      const Icon(Icons.pause_circle),
-                    const SizedBox(width: 12),
+                    Icon(
+                      jobState == 'processing'
+                          ? Icons.autorenew
+                          : Icons.pause,
+                    ),
+                    const SizedBox(width: 8),
                     Text(jobState.toUpperCase()),
                   ],
                 ),
               ),
             ),
 
-            const SizedBox(height: 12),
-
-            /* ===== CONVERT ===== */
-            FilledButton(
-              onPressed: inputFilePath == null
-                  ? null
-                  : () async {
-                      setState(() => jobState = "processing");
-                      startStatusPolling();
-
-                      await _channel.invokeMethod(
-                        'setCinemaConfig',
-                        {
-                          'inputPath': inputFilePath,
-                          'profile': config.profile.name,
-                          'channels': config.channels.name,
-                          'intensity': config.intensity.name,
-                        },
-                      );
-                    },
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed:
+                  pickedFilePath == null ? null : sendToCinemaEngine,
               child: const Text('Send to Cinema Engine'),
             ),
-
-            OutlinedButton(
-              onPressed: jobState == "processing"
-                  ? () => File('/sdcard/AudioCinema/cancel.txt')
-                      .writeAsStringSync('cancel')
-                  : null,
-              child: const Text('Cancel'),
-            ),
-
-            const Divider(height: 32),
-
-            /* ===== AMB3D / HOA ===== */
-            const Text(
-              'Spatial Audio (amb3d)',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-
-            DropdownButton<int>(
-              value: hoaOrder,
-              items: const [
-                DropdownMenuItem(value: 1, child: Text('HOA Order 1')),
-                DropdownMenuItem(value: 2, child: Text('HOA Order 2')),
-                DropdownMenuItem(value: 3, child: Text('HOA Order 3')),
-              ],
-              onChanged: (v) => setState(() => hoaOrder = v!),
-            ),
-
-            SwitchListTile(
-              title: const Text('Binaural Decode'),
-              value: binaural,
-              onChanged: (v) => setState(() => binaural = v),
-            ),
-
-            FilledButton(
-              onPressed: inputFilePath == null
-                  ? null
-                  : () {
-                      final cmd =
-                          'ffmpeg -i "$inputFilePath" '
-                          '-af "ambisonic=order=$hoaOrder'
-                          '${binaural ? ",headphone=ir=builtin" : ""}" '
-                          '/sdcard/AudioCinema/hoa_${DateTime.now().millisecondsSinceEpoch}.wav';
-
-                      File('/sdcard/AudioCinema/job.txt')
-                          .writeAsStringSync(cmd);
-                      startStatusPolling();
-                    },
-              child: const Text('Run amb3d Engine'),
-            ),
-
-            const Divider(height: 32),
-
-            /* ===== OUTPUT FILES ===== */
-            const Text(
-              'Output Files',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-
-            ...listOutputs().map((f) => ListTile(
-                  leading: const Icon(Icons.music_note),
-                  title: Text(f.path.split('/').last),
-                  subtitle: Text(f.path),
-                )),
           ],
         ),
       ),

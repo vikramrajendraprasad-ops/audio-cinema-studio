@@ -7,12 +7,43 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 
-import 'models/cinema_config.dart';
-import 'services/preset_service.dart';
-
 void main() {
   runApp(const AudioCinemaStudioApp());
 }
+
+/* ===================== ENUMS ===================== */
+
+enum CinemaProfile { dolby, sony, jbl, bose }
+enum OutputChannels { stereo, surround51, surround71 }
+enum ProfileIntensity { low, medium, high }
+
+/* ===================== CONFIG MODEL ===================== */
+
+class CinemaConfig {
+  final CinemaProfile profile;
+  final OutputChannels channels;
+  final ProfileIntensity intensity;
+
+  const CinemaConfig({
+    required this.profile,
+    required this.channels,
+    required this.intensity,
+  });
+
+  CinemaConfig copyWith({
+    CinemaProfile? profile,
+    OutputChannels? channels,
+    ProfileIntensity? intensity,
+  }) {
+    return CinemaConfig(
+      profile: profile ?? this.profile,
+      channels: channels ?? this.channels,
+      intensity: intensity ?? this.intensity,
+    );
+  }
+}
+
+/* ===================== APP ===================== */
 
 class AudioCinemaStudioApp extends StatelessWidget {
   const AudioCinemaStudioApp({super.key});
@@ -29,6 +60,8 @@ class AudioCinemaStudioApp extends StatelessWidget {
     );
   }
 }
+
+/* ===================== SCREEN ===================== */
 
 class CinemaScreen extends StatefulWidget {
   const CinemaScreen({super.key});
@@ -48,62 +81,47 @@ class _CinemaScreenState extends State<CinemaScreen> {
   );
 
   String? inputFilePath;
-  Map<String, CinemaConfig> presets = {};
-
   Timer? statusTimer;
   String jobState = "idle"; // idle | processing | done | error
 
-  @override
-  void initState() {
-    super.initState();
-    _loadPresets();
-  }
+  int hoaOrder = 1;
+  bool binaural = true;
 
-  @override
-  void dispose() {
-    statusTimer?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _loadPresets() async {
-    final loaded = await PresetService.loadPresets();
-    setState(() => presets = loaded);
-  }
-
-  Map<String, dynamic> _configToMap() {
-    return {
-      'inputPath': inputFilePath ?? '',
-      'profile': config.profile.name,
-      'channels': config.channels.name,
-      'intensity': config.intensity.name,
-    };
-  }
+  /* ===================== STATUS POLLING ===================== */
 
   void startStatusPolling() {
     statusTimer?.cancel();
-
     statusTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
       final file = File('/sdcard/AudioCinema/status.json');
-
-      if (!await file.exists()) {
-        setState(() => jobState = "idle");
-        return;
-      }
-
+      if (!await file.exists()) return;
       try {
-        final jsonMap = jsonDecode(await file.readAsString());
-        final state = jsonMap['state'] ?? 'idle';
-
+        final map = jsonDecode(await file.readAsString());
+        final state = map['state'] ?? 'idle';
         setState(() => jobState = state);
-
         if (state == "done" || state == "error") {
           statusTimer?.cancel();
         }
-      } catch (_) {
-        setState(() => jobState = "idle");
-      }
+      } catch (_) {}
     });
   }
+
+  /* ===================== OUTPUT LIST ===================== */
+
+  List<FileSystemEntity> listOutputs() {
+    final dir = Directory('/sdcard/AudioCinema');
+    if (!dir.existsSync()) return [];
+    return dir
+        .listSync()
+        .where((f) =>
+            f.path.endsWith('.wav') ||
+            f.path.endsWith('.ac3') ||
+            f.path.endsWith('.flac'))
+        .toList()
+        .reversed
+        .toList();
+  }
+
+  /* ===================== UI ===================== */
 
   @override
   Widget build(BuildContext context) {
@@ -117,206 +135,112 @@ class _CinemaScreenState extends State<CinemaScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Cinema Conversion',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
 
-            // Termux info
+            /* ===== INFO ===== */
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text(
-                      'External Audio Engine Required',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      '1. Install Termux\n'
-                      '2. Start Audio Cinema engine script\n'
-                      '3. Keep Termux running in background\n\n'
-                      'Processing happens outside this app.',
-                      style: TextStyle(fontSize: 13),
-                    ),
-                  ],
+                child: const Text(
+                  'This app uses an external FFmpeg engine via Termux.\n'
+                  'Keep Termux running in background.',
+                  style: TextStyle(fontSize: 13),
                 ),
               ),
             ),
 
             const SizedBox(height: 16),
 
-            // Pick audio file
+            /* ===== FILE PICKER ===== */
             FilledButton.icon(
               icon: const Icon(Icons.audiotrack),
-              label: Text(
-                inputFilePath == null
-                    ? 'Pick Audio File'
-                    : 'Audio Selected',
-              ),
+              label: Text(inputFilePath == null
+                  ? 'Pick Audio File'
+                  : 'Audio Selected'),
               onPressed: () async {
                 final result = await FilePicker.platform.pickFiles(
                   type: FileType.audio,
                 );
-
-                if (result != null && result.files.single.path != null) {
+                if (result != null) {
                   setState(() {
-                    inputFilePath = result.files.single.path!;
+                    inputFilePath = result.files.single.path;
                   });
                 }
               },
             ),
 
-            if (inputFilePath != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                inputFilePath!,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12),
+            if (inputFilePath != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  inputFilePath!,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ],
 
-            const SizedBox(height: 16),
+            const Divider(height: 32),
 
-            // Presets
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton(
-                    onPressed: () async {
-                      await PresetService.savePreset(
-                        'Preset ${presets.length + 1}',
-                        config,
-                      );
-                      await _loadPresets();
-                    },
-                    child: const Text('Save Preset'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    hint: const Text('Load Preset'),
-                    items: presets.entries
-                        .map(
-                          (e) => DropdownMenuItem(
-                            value: e.key,
-                            child: Text(e.key),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (name) {
-                      if (name != null) {
-                        setState(() {
-                          config = presets[name]!;
-                        });
-                      }
-                    },
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 24),
-
-            // Cinema profile
+            /* ===== CINEMA PROFILE ===== */
             const Text('Cinema Profile'),
-            const SizedBox(height: 8),
             DropdownButtonFormField<CinemaProfile>(
               value: config.profile,
               items: const [
                 DropdownMenuItem(
-                  value: CinemaProfile.dolby,
-                  child: Text('Dolby Cinema'),
-                ),
+                    value: CinemaProfile.dolby,
+                    child: Text('Dolby Cinema')),
                 DropdownMenuItem(
-                  value: CinemaProfile.sony,
-                  child: Text('Sony Clarity'),
-                ),
+                    value: CinemaProfile.sony,
+                    child: Text('Sony Clarity')),
                 DropdownMenuItem(
-                  value: CinemaProfile.jbl,
-                  child: Text('JBL Punch'),
-                ),
+                    value: CinemaProfile.jbl,
+                    child: Text('JBL Punch')),
                 DropdownMenuItem(
-                  value: CinemaProfile.bose,
-                  child: Text('Bose Deep'),
-                ),
+                    value: CinemaProfile.bose,
+                    child: Text('Bose Deep')),
               ],
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() {
-                    config = config.copyWith(profile: value);
-                  });
-                }
-              },
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-              ),
+              onChanged: (v) =>
+                  setState(() => config = config.copyWith(profile: v)),
             ),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
 
-            // Output channels
+            /* ===== CHANNELS ===== */
             const Text('Output Channels'),
-            const SizedBox(height: 8),
             SegmentedButton<OutputChannels>(
               segments: const [
                 ButtonSegment(
-                  value: OutputChannels.stereo,
-                  label: Text('Stereo'),
-                ),
+                    value: OutputChannels.stereo, label: Text('Stereo')),
                 ButtonSegment(
-                  value: OutputChannels.surround51,
-                  label: Text('5.1'),
-                ),
+                    value: OutputChannels.surround51, label: Text('5.1')),
                 ButtonSegment(
-                  value: OutputChannels.surround71,
-                  label: Text('7.1'),
-                ),
+                    value: OutputChannels.surround71, label: Text('7.1')),
               ],
               selected: {config.channels},
-              onSelectionChanged: (selection) {
-                setState(() {
-                  config = config.copyWith(channels: selection.first);
-                });
-              },
+              onSelectionChanged: (s) =>
+                  setState(() => config = config.copyWith(channels: s.first)),
             ),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
 
-            // Intensity
+            /* ===== INTENSITY ===== */
             const Text('Profile Intensity'),
-            const SizedBox(height: 8),
             SegmentedButton<ProfileIntensity>(
               segments: const [
                 ButtonSegment(
-                  value: ProfileIntensity.low,
-                  label: Text('Low'),
-                ),
+                    value: ProfileIntensity.low, label: Text('Low')),
                 ButtonSegment(
-                  value: ProfileIntensity.medium,
-                  label: Text('Medium'),
-                ),
+                    value: ProfileIntensity.medium, label: Text('Medium')),
                 ButtonSegment(
-                  value: ProfileIntensity.high,
-                  label: Text('High'),
-                ),
+                    value: ProfileIntensity.high, label: Text('High')),
               ],
               selected: {config.intensity},
-              onSelectionChanged: (selection) {
-                setState(() {
-                  config = config.copyWith(intensity: selection.first);
-                });
-              },
+              onSelectionChanged: (s) =>
+                  setState(() => config = config.copyWith(intensity: s.first)),
             ),
 
-            const SizedBox(height: 24),
+            const Divider(height: 32),
 
-            // Progress UI
+            /* ===== PROGRESS ===== */
             Card(
               color: jobState == "processing"
                   ? Colors.orange.shade50
@@ -336,43 +260,99 @@ class _CinemaScreenState extends State<CinemaScreen> {
                     else if (jobState == "error")
                       const Icon(Icons.error, color: Colors.red)
                     else
-                      const Icon(Icons.pause_circle, color: Colors.grey),
+                      const Icon(Icons.pause_circle),
                     const SizedBox(width: 12),
-                    Text(
-                      jobState == "processing"
-                          ? "Processing audio via external engine…"
-                          : jobState == "done"
-                              ? "Conversion completed successfully"
-                              : jobState == "error"
-                                  ? "Conversion failed"
-                                  : "Idle",
-                    ),
+                    Text(jobState.toUpperCase()),
                   ],
                 ),
               ),
             ),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 12),
 
-            // Convert button
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: inputFilePath == null
-                    ? null
-                    : () async {
-                        setState(() => jobState = "processing");
-                        startStatusPolling();
+            /* ===== CONVERT ===== */
+            FilledButton(
+              onPressed: inputFilePath == null
+                  ? null
+                  : () async {
+                      setState(() => jobState = "processing");
+                      startStatusPolling();
 
-                        final payload = _configToMap();
-                        await _channel.invokeMethod(
-                          'setCinemaConfig',
-                          payload,
-                        );
-                      },
-                child: const Text('Send to Cinema Engine'),
-              ),
+                      await _channel.invokeMethod(
+                        'setCinemaConfig',
+                        {
+                          'inputPath': inputFilePath,
+                          'profile': config.profile.name,
+                          'channels': config.channels.name,
+                          'intensity': config.intensity.name,
+                        },
+                      );
+                    },
+              child: const Text('Send to Cinema Engine'),
             ),
+
+            OutlinedButton(
+              onPressed: jobState == "processing"
+                  ? () => File('/sdcard/AudioCinema/cancel.txt')
+                      .writeAsStringSync('cancel')
+                  : null,
+              child: const Text('Cancel'),
+            ),
+
+            const Divider(height: 32),
+
+            /* ===== AMB3D / HOA ===== */
+            const Text(
+              'Spatial Audio (amb3d)',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+
+            DropdownButton<int>(
+              value: hoaOrder,
+              items: const [
+                DropdownMenuItem(value: 1, child: Text('HOA Order 1')),
+                DropdownMenuItem(value: 2, child: Text('HOA Order 2')),
+                DropdownMenuItem(value: 3, child: Text('HOA Order 3')),
+              ],
+              onChanged: (v) => setState(() => hoaOrder = v!),
+            ),
+
+            SwitchListTile(
+              title: const Text('Binaural Decode'),
+              value: binaural,
+              onChanged: (v) => setState(() => binaural = v),
+            ),
+
+            FilledButton(
+              onPressed: inputFilePath == null
+                  ? null
+                  : () {
+                      final cmd =
+                          'ffmpeg -i "$inputFilePath" '
+                          '-af "ambisonic=order=$hoaOrder'
+                          '${binaural ? ",headphone=ir=builtin" : ""}" '
+                          '/sdcard/AudioCinema/hoa_${DateTime.now().millisecondsSinceEpoch}.wav';
+
+                      File('/sdcard/AudioCinema/job.txt')
+                          .writeAsStringSync(cmd);
+                      startStatusPolling();
+                    },
+              child: const Text('Run amb3d Engine'),
+            ),
+
+            const Divider(height: 32),
+
+            /* ===== OUTPUT FILES ===== */
+            const Text(
+              'Output Files',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+
+            ...listOutputs().map((f) => ListTile(
+                  leading: const Icon(Icons.music_note),
+                  title: Text(f.path.split('/').last),
+                  subtitle: Text(f.path),
+                )),
           ],
         ),
       ),

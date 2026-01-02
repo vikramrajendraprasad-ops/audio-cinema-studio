@@ -1,0 +1,17 @@
+name: audio_cinema_studio
+description: Audio Cinema Studio
+publish_to: "none"
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  file_picker: ^6.1.1
+
+flutter:
+  uses-material-design: true

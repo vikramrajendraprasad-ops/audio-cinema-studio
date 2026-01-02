@@ -15,3 +15,10 @@ dependencies:
 
 flutter:
   uses-material-design: true
+
+  dependencies:
+  flutter:
+    sdk: flutter
+
+  file_picker: ^6.1.1
+  shared_preferences: ^2.2.2

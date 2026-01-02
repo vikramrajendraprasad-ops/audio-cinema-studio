@@ -2,7 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
+
 import 'models/cinema_config.dart';
+import 'services/preset_service.dart';
 
 void main() {
   runApp(const AudioCinemaStudioApp());
@@ -42,6 +44,18 @@ class _CinemaScreenState extends State<CinemaScreen> {
   );
 
   String? inputFilePath;
+  Map<String, CinemaConfig> presets = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPresets();
+  }
+
+  Future<void> _loadPresets() async {
+    final loaded = await PresetService.loadPresets();
+    setState(() => presets = loaded);
+  }
 
   Map<String, dynamic> _configToMap() {
     return {
@@ -91,15 +105,46 @@ class _CinemaScreenState extends State<CinemaScreen> {
               },
             ),
 
-            if (inputFilePath != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                inputFilePath!,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12),
-              ),
-            ],
+            const SizedBox(height: 16),
+
+            // Preset Save / Load
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () async {
+                      await PresetService.savePreset(
+                        'Preset ${presets.length + 1}',
+                        config,
+                      );
+                      await _loadPresets();
+                    },
+                    child: const Text('Save Preset'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    hint: const Text('Load Preset'),
+                    items: presets.entries
+                        .map(
+                          (e) => DropdownMenuItem(
+                            value: e.key,
+                            child: Text(e.key),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (name) {
+                      if (name != null) {
+                        setState(() {
+                          config = presets[name]!;
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
 
             const SizedBox(height: 24),
 
@@ -203,16 +248,10 @@ class _CinemaScreenState extends State<CinemaScreen> {
                     ? null
                     : () async {
                         final payload = _configToMap();
-
-                        try {
-                          final result = await _channel.invokeMethod(
-                            'setCinemaConfig',
-                            payload,
-                          );
-                          debugPrint('Native response: $result');
-                        } catch (e) {
-                          debugPrint('Platform error: $e');
-                        }
+                        await _channel.invokeMethod(
+                          'setCinemaConfig',
+                          payload,
+                        );
                       },
                 child: const Text('Send to Cinema Engine'),
               ),

@@ -1,3 +1,4 @@
+
 name: Flutter Android Debug Build
 
 on:
@@ -14,36 +15,38 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      # 2️⃣ Set up Flutter (stable)
+      # 2️⃣ Set up Flutter (stable channel)
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
-      # 3️⃣ Verify Flutter
+      # 3️⃣ Verify Flutter installation
       - name: Flutter doctor
         run: flutter doctor -v
 
-      # 4️⃣ Ensure clean state (android folder may not exist)
-      - name: Remove android folder if present
-        run: |
-          rm -rf android || true
+      # 4️⃣ Remove any existing android folder (safe even if missing)
+      - name: Remove android folder
+        run: rm -rf android || true
 
-      # 5️⃣ REGENERATE ANDROID PLATFORM (KEY STEP)
+      # 5️⃣ Regenerate Android platform (OFFICIAL FIX)
       - name: Regenerate Android platform
-        run: |
-          flutter create --platforms=android --project-name audio_cinema_studio .
+        run: flutter create --platforms=android --project-name audio_cinema_studio .
 
-      # 6️⃣ Get Dart dependencies
+      # 6️⃣ Fetch dependencies
       - name: Flutter pub get
         run: flutter pub get
 
-      # 7️⃣ Build DEBUG APK
+      # 7️⃣ Upgrade dependencies (fix v1 embedding plugins)
+      - name: Flutter pub upgrade
+        run: flutter pub upgrade
+
+      # 8️⃣ Build DEBUG APK
       - name: Build debug APK
         run: flutter build apk --debug
 
-      # 8️⃣ Upload APK artifact
+      # 9️⃣ Upload APK artifact
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:

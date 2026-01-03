@@ -8,24 +8,27 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: subosito/flutter-action@v2
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.22.0"
-          channel: "stable"
+          channel: stable
 
-      - name: Flutter doctor
-        run: flutter doctor -v
+      - name: Flutter version
+        run: flutter --version
 
-      - name: Clean
+      - name: Clean project
         run: flutter clean
 
-      - name: Pub get
+      - name: Get dependencies
         run: flutter pub get
 
+      # 🔑 THIS IS THE IMPORTANT LINE
       - name: Regenerate Android (embedding v2)
-        run: flutter create .
+        run: flutter create --project-name audio_cinema_studio .
 
       - name: Build debug APK
         run: flutter build apk --debug

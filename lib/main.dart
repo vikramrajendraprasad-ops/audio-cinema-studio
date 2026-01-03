@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
+import 'package:permission_handler/permission_handler.dart';
 
 void main() {
   runApp(const AudioCinemaApp());
@@ -14,8 +15,8 @@ class AudioCinemaApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Audio Cinema Studio',
       debugShowCheckedModeBanner: false,
+      title: 'Audio Cinema Studio',
       theme: ThemeData(
         useMaterial3: true,
         colorSchemeSeed: Colors.deepPurple,
@@ -40,14 +41,30 @@ class _AudioCinemaHomeState extends State<AudioCinemaHome> {
   String channels = 'Stereo';
   String intensity = 'Medium';
 
-  final List<String> profiles = [
+  final profiles = [
     'Dolby Cinema',
     'Sony Clarity',
     'JBL Punch',
     'Bose Deep',
   ];
 
-  // 🔑 Ensure shared directory
+  @override
+  void initState() {
+    super.initState();
+    requestStoragePermission();
+  }
+
+  // 🔐 Request storage permission (Android 11+ safe)
+  Future<void> requestStoragePermission() async {
+    if (await Permission.manageExternalStorage.isGranted) return;
+
+    final status = await Permission.manageExternalStorage.request();
+    if (!status.isGranted) {
+      openAppSettings();
+    }
+  }
+
+  // 📁 Ensure shared directory
   Future<Directory> ensureCinemaDir() async {
     final dir = Directory('/sdcard/AudioCinema');
     if (!await dir.exists()) {
@@ -56,9 +73,14 @@ class _AudioCinemaHomeState extends State<AudioCinemaHome> {
     return dir;
   }
 
-  // 🎵 Pick audio
+  // 🎵 Pick audio file
   Future<void> pickAudio() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.audio);
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg'],
+      allowMultiple: false,
+    );
+
     if (result != null && result.files.single.path != null) {
       setState(() {
         pickedFilePath = result.files.single.path!;
@@ -84,7 +106,7 @@ class _AudioCinemaHomeState extends State<AudioCinemaHome> {
       'output_${DateTime.now().millisecondsSinceEpoch}.wav',
     );
 
-    // Build FFmpeg command (basic – profiles can modify later)
+    // FFmpeg command (basic – profiles will extend later)
     final cmd = 'ffmpeg -y -i "$sharedInput" "$outputFile"';
 
     // Write job.txt
@@ -122,6 +144,7 @@ class _AudioCinemaHomeState extends State<AudioCinemaHome> {
                 ),
               ),
             ),
+
             const SizedBox(height: 16),
 
             ElevatedButton.icon(
@@ -147,12 +170,7 @@ class _AudioCinemaHomeState extends State<AudioCinemaHome> {
               value: cinemaProfile,
               isExpanded: true,
               items: profiles
-                  .map(
-                    (p) => DropdownMenuItem(
-                      value: p,
-                      child: Text(p),
-                    ),
-                  )
+                  .map((p) => DropdownMenuItem(value: p, child: Text(p)))
                   .toList(),
               onChanged: (v) => setState(() => cinemaProfile = v!),
             ),
@@ -190,11 +208,9 @@ class _AudioCinemaHomeState extends State<AudioCinemaHome> {
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    Icon(
-                      jobState == 'processing'
-                          ? Icons.autorenew
-                          : Icons.pause,
-                    ),
+                    Icon(jobState == 'processing'
+                        ? Icons.autorenew
+                        : Icons.pause),
                     const SizedBox(width: 8),
                     Text(jobState.toUpperCase()),
                   ],

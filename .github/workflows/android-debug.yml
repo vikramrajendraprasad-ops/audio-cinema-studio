@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout repo
+      # 1️⃣ Checkout repository
       - name: Checkout source
         uses: actions/checkout@v4
 
@@ -19,26 +19,27 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
 
-      # 3️⃣ Flutter doctor (debug info)
+      # 3️⃣ Verify Flutter
       - name: Flutter doctor
         run: flutter doctor -v
 
-      # 4️⃣ REMOVE broken android folder (critical)
-      - name: Remove old android folder
+      # 4️⃣ Ensure clean state (android folder may not exist)
+      - name: Remove android folder if present
         run: |
-          rm -rf android
+          rm -rf android || true
 
-      # 5️⃣ REGENERATE Android (OFFICIAL FIX)
+      # 5️⃣ REGENERATE ANDROID PLATFORM (KEY STEP)
       - name: Regenerate Android platform
         run: |
           flutter create --platforms=android --project-name audio_cinema_studio .
 
-      # 6️⃣ Get dependencies
+      # 6️⃣ Get Dart dependencies
       - name: Flutter pub get
         run: flutter pub get
 
-      # 7️⃣ Build debug APK
+      # 7️⃣ Build DEBUG APK
       - name: Build debug APK
         run: flutter build apk --debug
 

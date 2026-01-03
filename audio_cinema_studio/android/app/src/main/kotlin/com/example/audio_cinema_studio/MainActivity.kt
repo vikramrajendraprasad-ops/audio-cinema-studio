@@ -1,4 +1,5 @@
-package com.yourbrand.audiocinemastudio
+
+package com.example.audio_cinema_studio
 
 import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
@@ -19,6 +20,7 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             CHANNEL
         ).setMethodCallHandler { call, result ->
+
             when (call.method) {
 
                 "setCinemaConfig" -> {
@@ -32,7 +34,7 @@ class MainActivity : FlutterActivity() {
 
                         Log.d(
                             "AudioCinema",
-                            "Flutter → Kotlin: input=$inputPath, profile=$profile, channels=$channels, intensity=$intensity"
+                            "Flutter → Kotlin config received"
                         )
 
                         cinemaEngine.applyCinemaConfig(
@@ -42,10 +44,10 @@ class MainActivity : FlutterActivity() {
                             intensity = intensity
                         )
 
-                        result.success("CinemaEngine stub executed")
+                        result.success("Cinema config received")
 
                     } catch (e: Exception) {
-                        Log.e("AudioCinema", "Error receiving config", e)
+                        Log.e("AudioCinema", "Config error", e)
                         result.error("ENGINE_ERROR", e.message, null)
                     }
                 }

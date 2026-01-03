@@ -1,0 +1,50 @@
+name: Flutter Android Debug Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ Checkout repo
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      # 2️⃣ Set up Flutter (stable)
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      # 3️⃣ Flutter doctor (debug info)
+      - name: Flutter doctor
+        run: flutter doctor -v
+
+      # 4️⃣ REMOVE broken android folder (critical)
+      - name: Remove old android folder
+        run: |
+          rm -rf android
+
+      # 5️⃣ REGENERATE Android (OFFICIAL FIX)
+      - name: Regenerate Android platform
+        run: |
+          flutter create --platforms=android --project-name audio_cinema_studio .
+
+      # 6️⃣ Get dependencies
+      - name: Flutter pub get
+        run: flutter pub get
+
+      # 7️⃣ Build debug APK
+      - name: Build debug APK
+        run: flutter build apk --debug
+
+      # 8️⃣ Upload APK artifact
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-cinema-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk

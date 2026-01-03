@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:file_picker/file_picker.dart';
 
 void main() {
@@ -28,20 +27,12 @@ class Home extends StatefulWidget {
 class _HomeState extends State<Home> {
   String status = "IDLE";
 
-  @override
-  void initState() {
-    super.initState();
-    _requestPermissions();
-  }
-
-  Future<void> _requestPermissions() async {
-    await Permission.storage.request();
-  }
-
-  Future<void> _pickAudio() async {
+  Future<void> pickAudio() async {
     final result = await FilePicker.platform.pickFiles(type: FileType.audio);
     if (result != null) {
-      setState(() => status = "Audio Selected");
+      setState(() {
+        status = "Audio Selected";
+      });
     }
   }
 
@@ -56,7 +47,7 @@ class _HomeState extends State<Home> {
             Text("Status: $status"),
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: _pickAudio,
+              onPressed: pickAudio,
               child: const Text("Pick Audio File"),
             ),
           ],

@@ -4,12 +4,13 @@ plugins {
 }
 
 android {
-    compileSdkVersion 33
+    namespace "com.example.audio_cinema_studio"
+    compileSdk 33
 
     defaultConfig {
         applicationId "com.example.audio_cinema_studio"
-        minSdkVersion 21
-        targetSdkVersion 33
+        minSdk 21
+        targetSdk 33
         versionCode 1
         versionName "1.0"
     }

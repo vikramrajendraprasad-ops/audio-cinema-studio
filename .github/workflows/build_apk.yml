@@ -1,8 +1,6 @@
 name: Build Flutter APK
 
 on:
-  push:
-    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
@@ -10,23 +8,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.22.0"
           channel: "stable"
 
-      - name: Flutter version
-        run: flutter --version
+      - name: Flutter doctor
+        run: flutter doctor -v
 
-      - name: Clean project
+      - name: Clean
         run: flutter clean
 
-      - name: Get dependencies
+      - name: Pub get
         run: flutter pub get
+
+      - name: Regenerate Android (embedding v2)
+        run: flutter create .
 
       - name: Build debug APK
         run: flutter build apk --debug
@@ -34,5 +33,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: audio-cinema-debug-apk
+          name: app-debug
           path: build/app/outputs/flutter-apk/app-debug.apk

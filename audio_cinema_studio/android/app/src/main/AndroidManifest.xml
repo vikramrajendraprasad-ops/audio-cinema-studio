@@ -2,9 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.audio_cinema_studio">
 
-    <!-- ================= STORAGE PERMISSIONS ================= -->
-
-    <!-- Android 13+ (API 33+) -->
+    <!-- Android 13+ -->
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
 
     <!-- Android 12 and below -->
@@ -15,13 +13,8 @@
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
-    <!-- Power-user permission (needed for /sdcard/AudioCinema) -->
+    <!-- Power-user access -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
-
-    <!-- Optional but useful -->
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-
-    <!-- ================= APPLICATION ================= -->
 
     <application
         android:name="${applicationName}"
@@ -38,7 +31,6 @@
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
 
-            <!-- Flutter launcher -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
@@ -46,11 +38,9 @@
 
         </activity>
 
-        <!-- Flutter embedding v2 -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
 
     </application>
-
 </manifest>

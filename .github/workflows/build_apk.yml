@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Flutter APK
 
 on:
   push:
@@ -13,37 +13,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.6'
-          cache: true
+          flutter-version: "3.22.0"
+          channel: "stable"
 
-      - name: Flutter doctor
-        run: flutter doctor -v
+      - name: Flutter version
+        run: flutter --version
 
-      - name: Flutter pub get
+      - name: Clean project
+        run: flutter clean
+
+      - name: Get dependencies
         run: flutter pub get
 
-      # 🔑 CREATE TEMP PROJECT (VALID NAME)
-      - name: Generate Android platform safely
-        run: |
-          flutter create audio_cinema_tmp
-          rm -rf android
-          cp -r audio_cinema_tmp/android .
-          rm -rf audio_cinema_tmp
-
-      - name: Build APK (debug)
+      - name: Build debug APK
         run: flutter build apk --debug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: audio-cinema-studio-apk
+          name: audio-cinema-debug-apk
           path: build/app/outputs/flutter-apk/app-debug.apk

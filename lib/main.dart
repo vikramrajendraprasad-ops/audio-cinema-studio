@@ -1,9 +1,9 @@
 
+import 'dart:async';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:path/path.dart' as p;
-import 'package:permission_handler/permission_handler.dart';
 
 void main() {
   runApp(const AudioCinemaApp());
@@ -15,112 +15,179 @@ class AudioCinemaApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      debugShowCheckedModeBanner: false,
       title: 'Audio Cinema Studio',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: Colors.deepPurple,
-      ),
-      home: const AudioCinemaHome(),
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(useMaterial3: true),
+      home: const CinemaHome(),
     );
   }
 }
 
-class AudioCinemaHome extends StatefulWidget {
-  const AudioCinemaHome({super.key});
+class CinemaHome extends StatefulWidget {
+  const CinemaHome({super.key});
 
   @override
-  State<AudioCinemaHome> createState() => _AudioCinemaHomeState();
+  State<CinemaHome> createState() => _CinemaHomeState();
 }
 
-class _AudioCinemaHomeState extends State<AudioCinemaHome> {
-  String? pickedFilePath;
-  String jobState = 'idle';
+class _CinemaHomeState extends State<CinemaHome> {
+  String? pickedPath;
+  String status = "IDLE";
 
-  @override
-  void initState() {
-    super.initState();
-    requestPermission();
-  }
+  String profile = "Dolby Cinema";
+  String channels = "stereo";
+  String intensity = "medium";
 
-  Future<void> requestPermission() async {
-    if (await Permission.manageExternalStorage.isGranted) return;
-    await Permission.manageExternalStorage.request();
-  }
+  Timer? poller;
 
-  Future<Directory> ensureCinemaDir() async {
-    final dir = Directory('/sdcard/AudioCinema');
-    if (!await dir.exists()) {
-      await dir.create(recursive: true);
-    }
-    return dir;
-  }
+  final String workDir = "/sdcard/AudioCinema";
 
   Future<void> pickAudio() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg'],
-    );
+    final result = await FilePicker.platform.pickFiles(type: FileType.audio);
+    if (result == null) return;
 
-    if (result != null && result.files.single.path != null) {
-      setState(() => pickedFilePath = result.files.single.path!);
-    }
+    setState(() {
+      pickedPath = result.files.single.path;
+    });
   }
 
-  Future<void> sendToEngine() async {
-    if (pickedFilePath == null) return;
+  Future<void> sendToCinemaEngine() async {
+    if (pickedPath == null) return;
 
-    final dir = await ensureCinemaDir();
-    final input = File(pickedFilePath!);
-    final ext = p.extension(input.path);
+    final dir = Directory(workDir);
+    if (!dir.existsSync()) {
+      dir.createSync(recursive: true);
+    }
 
-    final sharedInput = p.join(dir.path, 'input$ext');
-    await input.copy(sharedInput);
+    final inputFile = File(pickedPath!);
+    final ext = inputFile.path.split('.').last;
+    final inputCopy = "$workDir/input.$ext";
+    final outputFile = "$workDir/output_${channels}.wav";
 
-    final output = p.join(
-      dir.path,
-      'output_${DateTime.now().millisecondsSinceEpoch}.wav',
+    await inputFile.copy(inputCopy);
+
+    final filter = buildFilter(profile, channels, intensity);
+
+    final job = File("$workDir/job.txt");
+    await job.writeAsString(
+      "$inputCopy\n$outputFile\n$filter\n",
+      flush: true,
     );
 
-    final cmd = 'ffmpeg -y -i "$sharedInput" "$output"';
+    setState(() {
+      status = "PROCESSING";
+    });
 
-    await File(p.join(dir.path, 'job.txt')).writeAsString(cmd);
-    await File(p.join(dir.path, 'status.json'))
-        .writeAsString('{"state":"queued"}');
+    startPolling();
+  }
 
-    setState(() => jobState = 'processing');
+  void startPolling() {
+    poller?.cancel();
+    poller = Timer.periodic(const Duration(seconds: 2), (_) async {
+      final statusFile = File("$workDir/status.json");
+      if (!statusFile.existsSync()) return;
+
+      final content = await statusFile.readAsString();
+      if (content.contains("done")) {
+        poller?.cancel();
+        setState(() {
+          status = "DONE";
+        });
+      }
+    });
+  }
+
+  String buildFilter(String profile, String channels, String intensity) {
+    final gain = intensity == "low"
+        ? "2"
+        : intensity == "high"
+            ? "6"
+            : "4";
+
+    switch (profile) {
+      case "Sony Clarity":
+        return "highpass=f=150,treble=g=$gain";
+      case "JBL Punch":
+        return "bass=g=$gain";
+      case "Bose Deep":
+        return "bass=g=8,lowpass=f=10000";
+      default:
+        return "stereotools=mlev=0.015625,bass=g=$gain";
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Audio Cinema Studio')),
+      appBar: AppBar(title: const Text("Audio Cinema Studio")),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            ElevatedButton.icon(
-              icon: const Icon(Icons.music_note),
-              label: Text(
-                pickedFilePath == null ? 'Pick Audio File' : 'Audio Selected',
-              ),
-              onPressed: pickAudio,
+            const Text(
+              "This app uses an external FFmpeg engine via Termux.\nKeep Termux running in background.",
+              textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 20),
+
             ElevatedButton(
-              onPressed: pickedFilePath == null ? null : sendToEngine,
-              child: const Text('Send to Cinema Engine'),
+              onPressed: pickAudio,
+              child: Text(pickedPath == null ? "Pick Audio File" : "Audio Selected"),
             ),
-            const SizedBox(height: 24),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  'STATUS: ${jobState.toUpperCase()}',
-                  style: const TextStyle(fontSize: 16),
-                ),
+
+            if (pickedPath != null)
+              Text(
+                pickedPath!,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
+
+            const SizedBox(height: 20),
+
+            DropdownButton<String>(
+              value: profile,
+              items: const [
+                DropdownMenuItem(value: "Dolby Cinema", child: Text("Dolby Cinema")),
+                DropdownMenuItem(value: "Sony Clarity", child: Text("Sony Clarity")),
+                DropdownMenuItem(value: "JBL Punch", child: Text("JBL Punch")),
+                DropdownMenuItem(value: "Bose Deep", child: Text("Bose Deep")),
+              ],
+              onChanged: (v) => setState(() => profile = v!),
+            ),
+
+            const SizedBox(height: 10),
+
+            DropdownButton<String>(
+              value: channels,
+              items: const [
+                DropdownMenuItem(value: "stereo", child: Text("Stereo")),
+                DropdownMenuItem(value: "5.1", child: Text("5.1")),
+                DropdownMenuItem(value: "7.1", child: Text("7.1")),
+              ],
+              onChanged: (v) => setState(() => channels = v!),
+            ),
+
+            const SizedBox(height: 10),
+
+            DropdownButton<String>(
+              value: intensity,
+              items: const [
+                DropdownMenuItem(value: "low", child: Text("Low")),
+                DropdownMenuItem(value: "medium", child: Text("Medium")),
+                DropdownMenuItem(value: "high", child: Text("High")),
+              ],
+              onChanged: (v) => setState(() => intensity = v!),
+            ),
+
+            const SizedBox(height: 20),
+
+            Text("STATUS: $status"),
+
+            const SizedBox(height: 10),
+
+            ElevatedButton(
+              onPressed: status == "PROCESSING" ? null : sendToCinemaEngine,
+              child: const Text("Send to Cinema Engine"),
             ),
           ],
         ),
